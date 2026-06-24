@@ -13,6 +13,12 @@
     tiles: 90
   };
 
+  var TUBULAR_RETAIL_RATES = {
+    '1x1': 46,
+    '1.5x1.5': 52,
+    '2x2': 95
+  };
+
   function round2(value) {
     return Math.round((Number(value) || 0) * 100) / 100;
   }
@@ -49,6 +55,10 @@
     return cubicInches / 231;
   }
 
+  function inchesToFeet(inches) {
+    return (Number(inches) || 0) / 12;
+  }
+
   function getGlassAreaSqFt(lengthInches, widthInches, heightInches) {
     var areaSqInches =
       (2 * (lengthInches * heightInches)) +
@@ -69,6 +79,174 @@
   function extractGlassMm(glass) {
     var match = String(glass || '').match(/(\d+)/);
     return match ? Number(match[1]) : 0;
+  }
+
+  function normalizeTubular(tubular) {
+    var text = String(tubular || '1x1').trim().toLowerCase().replace(/\s+/g, '');
+    if (text === '1x1') return '1x1';
+    if (text === '1.5x1.5' || text === '11/2x11/2' || text === '1 1/2 x 1 1/2') return '1.5x1.5';
+    if (text === '2x2') return '2x2';
+    return '1x1';
+  }
+
+  function getStandHeightInches(layers, tubular) {
+    var layerCount = Math.max(2, Math.round(Number(layers) || 2));
+    var normalizedTubular = normalizeTubular(tubular);
+    var baseHeightInches = normalizedTubular === '1x1' ? 30 : 36;
+    var incrementHeightInches = normalizedTubular === '1x1' ? 16 : 24;
+    return baseHeightInches + ((layerCount - 2) * incrementHeightInches);
+  }
+
+  function enforceStandTubularSafety(lengthInches, widthInches, glassThickness, tubular) {
+    var normalizedTubular = normalizeTubular(tubular);
+    var glassMm = extractGlassMm(glassThickness);
+
+    if (glassMm >= 10 && normalizedTubular !== '2x2') {
+      return {
+        tubular: '2x2',
+        notice: {
+          title: 'Stand Rule',
+          message: 'For 10mm and above aquariums, the stand tubular must be 2x2. Tubular has been updated to 2x2.',
+          updatedTubular: '2x2'
+        }
+      };
+    }
+
+    if (normalizedTubular === '1x1' && lengthInches > 30) {
+      return {
+        tubular: '1.5x1.5',
+        notice: {
+          title: 'Tubular size adjusted',
+          message: 'Length is greater than 30 inches - switching tubular to 1 1/2 x 1 1/2 for safety.',
+          updatedTubular: '1.5x1.5'
+        }
+      };
+    }
+
+    if (lengthInches >= 49 && widthInches >= 18 && normalizedTubular !== '2x2') {
+      return {
+        tubular: '2x2',
+        notice: {
+          title: 'Tubular size adjusted',
+          message: 'Length > 50 in and Width > 18 in - tubular set to 2 x 2 (mandatory).',
+          updatedTubular: '2x2'
+        }
+      };
+    }
+
+    return {
+      tubular: normalizedTubular,
+      notice: null
+    };
+  }
+
+  function computeStandRetailPrice(lengthFeet, widthFeet, heightFeet, layers, tubular, stainless, sumpWidthFeet) {
+    var layerCount = Math.max(2, Math.round(Number(layers) || 2));
+    var perimeterPerLayerFeet = 2 * (lengthFeet + widthFeet);
+    var totalPerimeterFeet = perimeterPerLayerFeet * layerCount;
+    var uprightsFeet = 4 * heightFeet;
+    var bracesPerFrame = Math.ceil(lengthFeet / 3);
+    var braceLengthPerFrameFeet = bracesPerFrame * widthFeet;
+    var totalBraceLengthFeet = braceLengthPerFrameFeet * layerCount;
+    var subtotalFeet = totalPerimeterFeet + uprightsFeet + totalBraceLengthFeet;
+    var adjustedFeet = subtotalFeet * 1.22;
+    var ratePerFoot = Number(TUBULAR_RETAIL_RATES[normalizeTubular(tubular)]) || TUBULAR_RETAIL_RATES['1x1'];
+
+    if (stainless) {
+      ratePerFoot *= 3;
+    }
+
+    var retailPrice = adjustedFeet * ratePerFoot;
+    var totalAdjustedFeet = adjustedFeet;
+    var breakdown = [];
+
+    if (sumpWidthFeet > 0) {
+      var sumpPerimeterFeet = 2 * (lengthFeet + sumpWidthFeet);
+      var sumpSupportsFeet = 2 * heightFeet;
+      var sumpBracesPerFrame = Math.ceil(lengthFeet / 3);
+      var sumpBraceFeet = sumpBracesPerFrame * sumpWidthFeet;
+      var sumpSubtotalFeet = sumpPerimeterFeet + sumpSupportsFeet + sumpBraceFeet;
+      var sumpCost = sumpSubtotalFeet * ratePerFoot;
+
+      totalAdjustedFeet += sumpSubtotalFeet;
+      retailPrice += sumpCost;
+
+      breakdown.push('Sump holder calculation:');
+      breakdown.push('Sump width: ' + sumpWidthFeet.toFixed(3) + ' ft');
+      breakdown.push('Perimeter P_sump: ' + sumpPerimeterFeet.toFixed(3) + ' ft');
+      breakdown.push('Uprights/supports U_sump: ' + sumpSupportsFeet.toFixed(3) + ' ft (u=2)');
+      breakdown.push('Braces per frame: ' + sumpBracesPerFrame);
+      breakdown.push('Total brace length B_sump: ' + sumpBraceFeet.toFixed(3) + ' ft');
+      breakdown.push('Subtotal T_sump: ' + sumpSubtotalFeet.toFixed(3) + ' ft');
+      breakdown.push('Sump Cost = ' + round2(sumpCost).toFixed(2));
+      breakdown.push('');
+    }
+
+    breakdown.push('Stand price calculation breakdown:');
+    breakdown.push('Length: ' + lengthFeet.toFixed(3) + ' ft');
+    breakdown.push('Width : ' + widthFeet.toFixed(3) + ' ft');
+    breakdown.push('Height: ' + heightFeet.toFixed(3) + ' ft');
+    breakdown.push('Layers: ' + layerCount);
+    breakdown.push('Tubular size: ' + normalizeTubular(tubular));
+    breakdown.push('Stainless: ' + (stainless ? 'Yes' : 'No'));
+    breakdown.push('');
+    breakdown.push('Perimeter per layer: ' + perimeterPerLayerFeet.toFixed(3) + ' ft');
+    breakdown.push('Total perimeter (all layers): ' + totalPerimeterFeet.toFixed(3) + ' ft');
+    breakdown.push('Uprights (4 x H): ' + uprightsFeet.toFixed(3) + ' ft');
+    breakdown.push('Braces per frame: ' + bracesPerFrame);
+    breakdown.push('Brace length per frame: ' + braceLengthPerFrameFeet.toFixed(3) + ' ft');
+    breakdown.push('Total brace length (all layers): ' + totalBraceLengthFeet.toFixed(3) + ' ft');
+    breakdown.push('Subtotal tubular length: ' + subtotalFeet.toFixed(3) + ' ft');
+    breakdown.push('Adjusted length ' + adjustedFeet.toFixed(3) + ' ft');
+    breakdown.push('Retail price = ' + round2(retailPrice).toFixed(2));
+
+    return {
+      price: round2(retailPrice),
+      breakdown: breakdown.join('\n'),
+      totalFeetConsumed: round2(totalAdjustedFeet)
+    };
+  }
+
+  function calculateStand(lengthInches, widthInches, glassThickness, standOptions, defaultUnit) {
+    var stand = standOptions || {};
+    if (!stand.enabled) {
+      return null;
+    }
+
+    var layers = Math.max(2, Math.round(Number(stand.layers) || 2));
+    var tubularSafety = enforceStandTubularSafety(lengthInches, widthInches, glassThickness, stand.tubular || '1x1');
+    var tubular = tubularSafety.tubular;
+    var standHeightInches = getStandHeightInches(layers, tubular);
+    var stainless = Boolean(stand.stainless);
+    var cabinet = Boolean(stand.cabinet);
+    var sumpHolder = Boolean(stand.sumpHolder);
+    var standUnit = stand.unit || defaultUnit || 'Inches';
+    var sumpWidthInches = sumpHolder ? toInches(stand.sumpWidth, standUnit) : 0;
+    var computed = computeStandRetailPrice(
+      inchesToFeet(lengthInches),
+      inchesToFeet(widthInches),
+      inchesToFeet(standHeightInches),
+      layers,
+      tubular,
+      stainless,
+      inchesToFeet(sumpWidthInches)
+    );
+
+    return {
+      enabled: true,
+      price: computed.price,
+      breakdown: computed.breakdown,
+      totalFeetConsumed: computed.totalFeetConsumed,
+      layers: layers,
+      tubular: tubular,
+      stainless: stainless,
+      cabinet: cabinet,
+      sumpHolder: sumpHolder,
+      sumpWidth: round2(sumpWidthInches),
+      unit: standUnit,
+      heightInches: round2(standHeightInches),
+      notice: tubularSafety.notice
+    };
   }
 
   function getRequiredGlassFromMessage(message) {
@@ -209,7 +387,7 @@
     var hasHighStrip = Boolean(options.highStrip);
     var hasAquascapeService = Boolean(options.aquascapeService);
     var hasEnclosure = Boolean(options.enclosure);
-    var hasStand = Boolean(options.stand && options.stand.enabled && Number(options.stand.price) > 0);
+    var hasStand = Boolean(options.stand && options.stand.enabled);
     var hasFiltrationSump = Boolean(
       (options.filtrationSump && options.filtrationSump.enabled) ||
       String(optionType).toLowerCase() === 'complete setup'
@@ -321,6 +499,7 @@
     var basePricePerSqFt = Number(glassPrices[glass]) || 100;
     var finalPricePerSqFt = basePricePerSqFt;
     var glassAreaSqFt = getGlassAreaSqFt(lengthInches, widthInches, heightInches);
+    var standCalculation = calculateStand(lengthInches, widthInches, glass, options.stand, unit);
     var components = {
       glass: 0,
       highStrip: 0,
@@ -334,7 +513,7 @@
       stickerBackground: 0,
       stickerBottom: 0,
       aquascapeService: 0,
-      stand: hasStand ? Number(options.stand.price) || 0 : 0
+      stand: standCalculation ? Number(standCalculation.price) || 0 : 0
     };
 
     if (gallons < 90 && glass === '6mm') {
@@ -490,7 +669,7 @@
 
     var aquariumOnlyPrice = calculatedPrice;
 
-    if (hasStand) {
+    if (hasStand && standCalculation) {
       calculatedPrice += components.stand;
     }
 
@@ -513,10 +692,12 @@
         lengthInches: round2(lengthInches),
         widthInches: round2(widthInches),
         heightInches: round2(heightInches),
-        sump: normalizedSump
+        sump: normalizedSump,
+        stand: standCalculation
       },
       safety: safety,
-      safetyNotice: safetyNotice
+      safetyNotice: safetyNotice,
+      standNotice: standCalculation ? standCalculation.notice : null
     };
   }
 

@@ -382,9 +382,33 @@
           <label class="checkbox-row"><input id="standEnabled" type="checkbox">Stand</label>
         </div>
 
-        <div id="standPriceWrap" class="field hidden" style="margin-top: 12px;">
-          <label for="standPrice">Stand Price</label>
-          <input id="standPrice" type="number" value="0" step="0.01">
+        <div id="standCalcWrap" class="hidden" style="margin-top: 12px;">
+          <div class="field">
+            <label for="standLayers">Stand Layers</label>
+            <input id="standLayers" type="number" value="2" min="2" step="1">
+          </div>
+
+          <div class="field">
+            <label for="standTubular">Stand Tubular</label>
+            <select id="standTubular">
+              <option value="1x1">1 x 1</option>
+              <option value="1.5x1.5">1 1/2 x 1 1/2</option>
+              <option value="2x2">2 x 2</option>
+            </select>
+          </div>
+
+          <div class="checkbox-stack">
+            <label class="checkbox-row"><input id="standStainless" type="checkbox">Stainless</label>
+            <label class="checkbox-row"><input id="standCabinet" type="checkbox">Cabinet</label>
+            <label class="checkbox-row"><input id="standSumpHolder" type="checkbox">Sump Holder</label>
+          </div>
+
+          <div id="standSumpWidthWrap" class="field hidden">
+            <label for="standSumpWidth">Sump Holder Width</label>
+            <input id="standSumpWidth" type="number" value="0" min="0" step="0.01">
+          </div>
+
+          <div id="standInfo" class="summary-small">Stand uses the aquarium length and width as its footprint.</div>
         </div>
       </section>
 
@@ -499,10 +523,6 @@
       </div>
     </section>
 
-    <details>
-      <summary>Calculation details</summary>
-      <pre id="output">Loading glass pricing setup...</pre>
-    </details>
   </div>
 
   <script id="glassPricingFallback" type="application/json">
@@ -516,7 +536,6 @@
 
   <script src="./custom-aquarium-calculator.js"></script>
   <script>
-    var output = document.getElementById('output');
     var calculateButton = document.getElementById('calculate');
     var addToSaleButton = document.getElementById('addToSale');
     var closeButton = document.getElementById('closeButton');
@@ -533,7 +552,7 @@
       temperedMandatory: false,
       aioGlassAutoFix: false,
       lowIronGlassAutoFix: false,
-      lastSafetyNoticeSignature: ''
+      lastAutoNoticeSignature: ''
     };
 
     function byId(id) {
@@ -591,6 +610,20 @@
         return;
       }
       byId(id).value = value;
+    }
+
+    function collectAutoNotices(result) {
+      var notices = [];
+
+      if (result && result.safetyNotice && result.safetyNotice.message) {
+        notices.push(result.safetyNotice);
+      }
+
+      if (result && result.standNotice && result.standNotice.message) {
+        notices.push(result.standNotice);
+      }
+
+      return notices;
     }
 
     function enforceOptionRules(showAlerts) {
@@ -849,7 +882,8 @@
       byId('allSidesRow').classList.toggle('hidden', !backgroundEnabled);
       byId('backgroundTypeWrap').classList.toggle('hidden', !backgroundEnabled);
       byId('bottomTypeWrap').classList.toggle('hidden', !bottomEnabled);
-      byId('standPriceWrap').classList.toggle('hidden', !standEnabled);
+      byId('standCalcWrap').classList.toggle('hidden', !standEnabled);
+      byId('standSumpWidthWrap').classList.toggle('hidden', !standEnabled || !byId('standSumpHolder').checked);
     }
 
     function buildPayload() {
@@ -883,7 +917,13 @@
         },
         stand: {
           enabled: byId('standEnabled').checked,
-          price: byId('standPrice').value
+          layers: byId('standLayers').value,
+          tubular: byId('standTubular').value,
+          stainless: byId('standStainless').checked,
+          cabinet: byId('standCabinet').checked,
+          sumpHolder: byId('standSumpHolder').checked,
+          sumpWidth: byId('standSumpHolder').checked ? byId('standSumpWidth').value : 0,
+          unit: byId('unit').value
         },
         stickerBackground: {
           enabled: byId('stickerBackground').checked,
@@ -904,12 +944,14 @@
       };
     }
 
-    function getSafetyNoticeSignature(notice) {
-      if (!notice) {
+    function getAutoNoticeSignature(notices) {
+      if (!Array.isArray(notices) || notices.length === 0) {
         return '';
       }
 
-      return String(notice.title || '') + '|' + String(notice.message || '') + '|' + String(notice.updatedGlassThickness || '');
+      return notices.map(function (notice) {
+        return String(notice.title || '') + '|' + String(notice.message || '') + '|' + String(notice.updatedGlassThickness || notice.updatedTubular || '');
+      }).join('||');
     }
 
     function syncCalculatedStateToUi(result, showAlerts) {
@@ -926,23 +968,35 @@
         if (typeof result.normalized.temperedGlass === 'boolean' && byId('tempered').checked !== result.normalized.temperedGlass) {
           byId('tempered').checked = result.normalized.temperedGlass;
         }
+
+        if (result.normalized.stand) {
+          if (result.normalized.stand.tubular && byId('standTubular').value !== result.normalized.stand.tubular) {
+            byId('standTubular').value = result.normalized.stand.tubular;
+          }
+
+          if (result.normalized.stand.layers && Number(byId('standLayers').value) !== Number(result.normalized.stand.layers)) {
+            byId('standLayers').value = result.normalized.stand.layers;
+          }
+        }
       } finally {
         suppressUiSync = false;
       }
 
-      var notice = result.safetyNotice || null;
-      var signature = getSafetyNoticeSignature(notice);
+      var notices = collectAutoNotices(result);
+      var signature = getAutoNoticeSignature(notices);
 
       if (!signature) {
-        ruleNoticeState.lastSafetyNoticeSignature = '';
+        ruleNoticeState.lastAutoNoticeSignature = '';
         return;
       }
 
-      if (showAlerts && ruleNoticeState.lastSafetyNoticeSignature !== signature) {
-        window.alert(String(notice.message || '').trim());
+      if (showAlerts && ruleNoticeState.lastAutoNoticeSignature !== signature) {
+        window.alert(notices.map(function (notice) {
+          return String(notice.message || '').trim();
+        }).join('\n\n'));
       }
 
-      ruleNoticeState.lastSafetyNoticeSignature = signature;
+      ruleNoticeState.lastAutoNoticeSignature = signature;
     }
 
     function renderSummary(result) {
@@ -957,6 +1011,11 @@
       volumeLine.innerHTML = '<strong>Volume:</strong> ' + result.gallons.toFixed(1) + ' gallons';
       priceLine.innerHTML = '<strong>Price:</strong> ' + result.totalPrice.toFixed(2);
       dimensionsLine.textContent = 'Dimensions (in): L: ' + result.normalized.lengthInches.toFixed(1) + ' x W: ' + result.normalized.widthInches.toFixed(1) + ' x H: ' + result.normalized.heightInches.toFixed(1);
+      if (result.normalized.stand && result.normalized.stand.enabled) {
+        byId('standInfo').textContent = 'Stand: ' + result.components.stand.toFixed(2) + ' | Tubular: ' + result.normalized.stand.tubular + ' | Layers: ' + result.normalized.stand.layers + ' | Height: ' + result.normalized.stand.heightInches.toFixed(1) + ' in';
+      } else {
+        byId('standInfo').textContent = 'Stand uses the aquarium length and width as its footprint.';
+      }
       renderSafetyBanner(result);
     }
 
@@ -979,6 +1038,10 @@
         messages.push(String(result.safetyNotice.message).replace(/\s+/g, ' ').trim());
       } else if (result.safety && result.safety.message && result.safety.message !== 'OK') {
         messages.push(result.safety.message);
+      }
+
+      if (result.standNotice && result.standNotice.message) {
+        messages.push(String(result.standNotice.message).replace(/\s+/g, ' ').trim());
       }
 
       if (result.normalized && result.normalized.glassThickness && result.requested && result.requested.glassThickness) {
@@ -1035,7 +1098,6 @@
         return glassPricingSetupRows;
       }
 
-      output.textContent = 'Loading glass pricing setup...';
       return loadGlassPricingSetupRows();
     }
 
@@ -1047,26 +1109,24 @@
         var result = window.CustomAquariumCalculator.calculateCustomAquarium(buildPayload());
         lastResult = result;
         syncCalculatedStateToUi(result, Boolean(showAlerts));
-        output.textContent = JSON.stringify(result, null, 2);
         renderSummary(result);
         drawAquarium(result);
       } catch (error) {
         lastResult = null;
-        output.textContent = 'Unable to load glass pricing setup. Make sure glass-pricing.json is published with the page.\n\n' + error.message;
         renderSummary({ ok: false, error: error.message });
         drawPlaceholder('Unable to load pricing data.');
       }
     }
 
     function attachAutoStateHandlers() {
-      ['sumpEnabled', 'stickerBackground', 'stickerBottom', 'standEnabled', 'submersibleLight', 'submersiblePump']
+      ['sumpEnabled', 'stickerBackground', 'stickerBottom', 'standEnabled', 'standSumpHolder', 'submersibleLight', 'submersiblePump']
         .forEach(function (id) {
           byId(id).addEventListener('change', setVisibilityState);
         });
 
       [
         'length', 'width', 'height', 'unit', 'option', 'glass', 'sealant', 'aio', 'lowIron', 'tempered', 'rimless', 'highStrip',
-        'sumpEnabled', 'aquascape', 'enclosure', 'standEnabled', 'standPrice', 'sumpType', 'sumpLength', 'sumpWidth', 'sumpHeight',
+        'sumpEnabled', 'aquascape', 'enclosure', 'standEnabled', 'standLayers', 'standTubular', 'standStainless', 'standCabinet', 'standSumpHolder', 'standSumpWidth', 'sumpType', 'sumpLength', 'sumpWidth', 'sumpHeight',
         'sumpUnit', 'piping', 'overflowBox', 'filterMedias', 'submersibleLight', 'submersiblePump', 'allumTopCover', 'lightPrice',
         'pumpPrice', 'stickerBackground', 'allSides', 'stickerBackgroundType', 'stickerBottom', 'stickerBottomType', 'specialNote'
       ].forEach(function (id) {
@@ -1109,12 +1169,10 @@
 
     ensureGlassPricingLoaded()
       .then(function () {
-        output.textContent = 'Glass pricing setup loaded. Click Calculate to run the pricing.';
         renderSummary({ ok: false, error: 'Click Calculate to run the pricing.' });
         drawPlaceholder('Glass pricing loaded. Click Calculate to render the aquarium.');
       })
       .catch(function (error) {
-        output.textContent = 'Initial load failed.\n\n' + error.message;
         renderSummary({ ok: false, error: error.message });
         drawPlaceholder('Initial pricing load failed.');
       });
