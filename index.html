@@ -192,13 +192,43 @@
       color: #20395f;
     }
 
+    .summary-line-volume,
+    .summary-line-price {
+      font-size: 20px;
+      font-weight: 700;
+      line-height: 1.25;
+    }
+
+    .summary-line-volume {
+      color: #1e9a59;
+    }
+
+    .summary-line-price {
+      color: #c63b32;
+    }
+
     .summary-line strong {
       color: #132d52;
+    }
+
+    .summary-line-volume strong {
+      color: #157544;
+    }
+
+    .summary-line-price strong {
+      color: #9e2d27;
     }
 
     .summary-small {
       font-size: 11px;
       color: var(--text-muted);
+    }
+
+    .summary-details {
+      margin-top: 6px;
+      font-size: 11px;
+      line-height: 1.45;
+      color: #4e6486;
     }
 
     .status-banner {
@@ -504,13 +534,12 @@
 
     <div class="actions-row">
       <button id="calculate" class="btn btn-primary" type="button">Calculate</button>
-      <button id="addToSale" class="btn btn-success" type="button">Add to sale</button>
-      <button id="closeButton" class="btn btn-neutral" type="button">Close</button>
 
       <div class="summary">
-        <div id="volumeLine" class="summary-line"><strong>Volume:</strong> loading...</div>
-        <div id="priceLine" class="summary-line"><strong>Price:</strong> waiting for calculation</div>
+        <div id="volumeLine" class="summary-line summary-line-volume"><strong>Volume:</strong> loading...</div>
+        <div id="priceLine" class="summary-line summary-line-price"><strong>Price:</strong> waiting for calculation</div>
         <div id="dimensionsLine" class="summary-small">Dimensions (in): -</div>
+        <div id="detailsLine" class="summary-details">Details: -</div>
       </div>
     </div>
 
@@ -537,11 +566,10 @@
   <script src="./custom-aquarium-calculator.js"></script>
   <script>
     var calculateButton = document.getElementById('calculate');
-    var addToSaleButton = document.getElementById('addToSale');
-    var closeButton = document.getElementById('closeButton');
     var volumeLine = document.getElementById('volumeLine');
     var priceLine = document.getElementById('priceLine');
     var dimensionsLine = document.getElementById('dimensionsLine');
+    var detailsLine = document.getElementById('detailsLine');
     var safetyBanner = document.getElementById('safetyBanner');
     var canvas = document.getElementById('aquariumCanvas');
     var context = canvas.getContext('2d');
@@ -954,6 +982,34 @@
       }).join('||');
     }
 
+    function buildSummaryDetails(result) {
+      if (!result || !result.ok || !result.normalized) {
+        return 'Details: -';
+      }
+
+      var details = [];
+      var normalized = result.normalized;
+      var components = result.components || {};
+
+      details.push('Glass: ' + normalized.glassThickness);
+      details.push('Tempered: ' + (normalized.temperedGlass ? 'Yes' : 'No'));
+      details.push('Option: ' + normalized.option);
+
+      if (components.stand > 0 && normalized.stand && normalized.stand.enabled) {
+        details.push('Stand: ' + components.stand.toFixed(2) + ' (' + normalized.stand.tubular + ')');
+      }
+
+      if (normalized.sump) {
+        details.push('Sump: ' + normalized.sump.type);
+      }
+
+      if (components.stickerBackground > 0 || components.stickerBottom > 0) {
+        details.push('Stickers: ' + (components.stickerBackground + components.stickerBottom).toFixed(2));
+      }
+
+      return 'Details: ' + details.join(' | ');
+    }
+
     function syncCalculatedStateToUi(result, showAlerts) {
       if (!result || !result.normalized) {
         return;
@@ -1004,6 +1060,7 @@
         volumeLine.innerHTML = '<strong>Volume:</strong> invalid';
         priceLine.innerHTML = '<strong>Price:</strong> check inputs';
         dimensionsLine.textContent = result && result.error ? result.error : 'Dimensions (in): -';
+        detailsLine.textContent = 'Details: -';
         renderSafetyBanner(result);
         return;
       }
@@ -1011,6 +1068,7 @@
       volumeLine.innerHTML = '<strong>Volume:</strong> ' + result.gallons.toFixed(1) + ' gallons';
       priceLine.innerHTML = '<strong>Price:</strong> ' + result.totalPrice.toFixed(2);
       dimensionsLine.textContent = 'Dimensions (in): L: ' + result.normalized.lengthInches.toFixed(1) + ' x W: ' + result.normalized.widthInches.toFixed(1) + ' x H: ' + result.normalized.heightInches.toFixed(1);
+      detailsLine.textContent = buildSummaryDetails(result);
       if (result.normalized.stand && result.normalized.stand.enabled) {
         byId('standInfo').textContent = 'Stand: ' + result.components.stand.toFixed(2) + ' | Tubular: ' + result.normalized.stand.tubular + ' | Layers: ' + result.normalized.stand.layers + ' | Height: ' + result.normalized.stand.heightInches.toFixed(1) + ' in';
       } else {
@@ -1144,18 +1202,6 @@
         byId('sumpUnit').value = byId('unit').value;
       });
 
-      closeButton.addEventListener('click', function () {
-        window.location.reload();
-      });
-
-      addToSaleButton.addEventListener('click', function () {
-        if (!lastResult || !lastResult.ok) {
-          window.alert('Calculate a valid aquarium first.');
-          return;
-        }
-
-        window.alert('Web demo only. Add to sale would use the current total: ' + lastResult.totalPrice.toFixed(2));
-      });
     }
 
     calculateButton.addEventListener('click', function () {
