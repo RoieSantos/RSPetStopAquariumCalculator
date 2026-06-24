@@ -429,7 +429,7 @@
 
           <div class="checkbox-stack">
             <label class="checkbox-row"><input id="standStainless" type="checkbox">Stainless</label>
-            <label class="checkbox-row"><input id="standCabinet" type="checkbox">Cabinet</label>
+            <label class="checkbox-row"><input id="standCabinet" type="checkbox" disabled>Cabinet</label>
             <label class="checkbox-row"><input id="standSumpHolder" type="checkbox">Sump Holder</label>
           </div>
 
@@ -477,22 +477,7 @@
             <label class="checkbox-row"><input id="piping" type="checkbox">Set of Piping</label>
             <label class="checkbox-row"><input id="overflowBox" type="checkbox">Overflow Box</label>
             <label class="checkbox-row"><input id="filterMedias" type="checkbox">Filter medias</label>
-            <label class="checkbox-row"><input id="submersibleLight" type="checkbox">Submersible Light</label>
-            <label class="checkbox-row"><input id="submersiblePump" type="checkbox">Submersible Pump</label>
             <label class="checkbox-row"><input id="allumTopCover" type="checkbox">Allum Top Cover</label>
-          </div>
-        </div>
-
-        <div id="sumpPriceInputs" class="hidden" style="margin-top: 12px;">
-          <div class="inline-field">
-            <div class="field">
-              <label for="lightPrice">Light Price</label>
-              <input id="lightPrice" type="number" value="0" step="0.01">
-            </div>
-            <div class="field">
-              <label for="pumpPrice">Pump Price</label>
-              <input id="pumpPrice" type="number" value="0" step="0.01">
-            </div>
           </div>
         </div>
       </section>
@@ -895,7 +880,6 @@
       var backgroundEnabled = byId('stickerBackground').checked;
       var bottomEnabled = byId('stickerBottom').checked;
       var standEnabled = byId('standEnabled').checked;
-      var anyPumpOrLight = byId('submersibleLight').checked || byId('submersiblePump').checked;
       var selectedOption = byId('option').value;
 
       if (selectedOption === 'Complete setup') {
@@ -906,7 +890,6 @@
 
       byId('sumpFieldsWrap').style.opacity = sumpEnabled ? '1' : '0.42';
       byId('sumpFieldsWrap').style.pointerEvents = sumpEnabled ? 'auto' : 'none';
-      byId('sumpPriceInputs').classList.toggle('hidden', !sumpEnabled || !anyPumpOrLight);
       byId('allSidesRow').classList.toggle('hidden', !backgroundEnabled);
       byId('backgroundTypeWrap').classList.toggle('hidden', !backgroundEnabled);
       byId('bottomTypeWrap').classList.toggle('hidden', !bottomEnabled);
@@ -939,9 +922,7 @@
           filterMedias: byId('filterMedias').checked,
           piping: byId('piping').checked,
           overflowBox: byId('overflowBox').checked,
-          allumTopCover: byId('allumTopCover').checked,
-          lightPrice: byId('submersibleLight').checked ? byId('lightPrice').value : 0,
-          pumpPrice: byId('submersiblePump').checked ? byId('pumpPrice').value : 0
+          allumTopCover: byId('allumTopCover').checked
         },
         stand: {
           enabled: byId('standEnabled').checked,
@@ -1177,7 +1158,7 @@
     }
 
     function attachAutoStateHandlers() {
-      ['sumpEnabled', 'stickerBackground', 'stickerBottom', 'standEnabled', 'standSumpHolder', 'submersibleLight', 'submersiblePump']
+      ['sumpEnabled', 'stickerBackground', 'stickerBottom', 'standEnabled', 'standSumpHolder']
         .forEach(function (id) {
           byId(id).addEventListener('change', setVisibilityState);
         });
@@ -1185,8 +1166,7 @@
       [
         'length', 'width', 'height', 'unit', 'option', 'glass', 'sealant', 'aio', 'lowIron', 'tempered', 'rimless', 'highStrip',
         'sumpEnabled', 'aquascape', 'enclosure', 'standEnabled', 'standLayers', 'standTubular', 'standStainless', 'standCabinet', 'standSumpHolder', 'standSumpWidth', 'sumpType', 'sumpLength', 'sumpWidth', 'sumpHeight',
-        'sumpUnit', 'piping', 'overflowBox', 'filterMedias', 'submersibleLight', 'submersiblePump', 'allumTopCover', 'lightPrice',
-        'pumpPrice', 'stickerBackground', 'allSides', 'stickerBackgroundType', 'stickerBottom', 'stickerBottomType', 'specialNote'
+        'sumpUnit', 'piping', 'overflowBox', 'filterMedias', 'allumTopCover', 'stickerBackground', 'allSides', 'stickerBackgroundType', 'stickerBottom', 'stickerBottomType', 'specialNote'
       ].forEach(function (id) {
         var eventName = byId(id).tagName === 'INPUT' && (byId(id).type === 'number' || byId(id).type === 'text' || byId(id).tagName === 'TEXTAREA')
           ? 'input'
