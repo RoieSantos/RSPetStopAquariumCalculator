@@ -573,7 +573,8 @@
       temperedMandatory: false,
       aioGlassAutoFix: false,
       lowIronGlassAutoFix: false,
-      lastAutoNoticeSignature: ''
+      lastAutoNoticeSignature: '',
+      lastSumpType: ''
     };
 
     function byId(id) {
@@ -681,7 +682,9 @@
 
         if (isCompleteSetup) {
           sumpEnabled.checked = true;
-          byId('sumpType').value = 'Overhead Sump';
+          if (!byId('sumpType').value) {
+            byId('sumpType').value = 'Overhead Sump';
+          }
         }
 
         if (sumpEnabled.checked) {
@@ -749,12 +752,29 @@
 
         if (sumpEnabled.checked) {
           var sumpType = byId('sumpType').value;
+          var piping = byId('piping');
+          var overflowBox = byId('overflowBox');
+
+          if (sumpType !== ruleNoticeState.lastSumpType) {
+            if (sumpType === 'Undersump') {
+              piping.checked = true;
+              overflowBox.checked = true;
+            } else {
+              piping.checked = false;
+              overflowBox.checked = false;
+            }
+
+            ruleNoticeState.lastSumpType = sumpType;
+          }
+
           var sumpDefault = convertInchesToSelectedUnit(sumpType === 'Undersump' ? 18 : 6, byId('sumpUnit').value);
           trySetFieldValue('sumpWidth', sumpDefault);
           trySetFieldValue('sumpHeight', sumpDefault);
           if (sumpType === 'Overhead Sump') {
             byId('sumpLength').value = byId('length').value;
           }
+        } else {
+          ruleNoticeState.lastSumpType = '';
         }
       } finally {
         suppressUiSync = false;
@@ -892,7 +912,9 @@
 
       if (selectedOption === 'Complete setup') {
         byId('sumpEnabled').checked = true;
-        byId('sumpType').value = 'Overhead Sump';
+        if (!byId('sumpType').value) {
+          byId('sumpType').value = 'Overhead Sump';
+        }
         sumpEnabled = true;
       }
 
@@ -959,6 +981,28 @@
           tiles: 90
         }
       };
+    }
+
+    function validateRequiredSelections(payload) {
+      var missingFields = [];
+
+      if (!payload.unit) {
+        missingFields.push('Unit of Measure');
+      }
+
+      if (!payload.option) {
+        missingFields.push('Option');
+      }
+
+      if (!payload.glassThickness) {
+        missingFields.push('Glass Thickness');
+      }
+
+      if (missingFields.length === 0) {
+        return null;
+      }
+
+      return 'Please select: ' + missingFields.join(', ') + '.';
     }
 
     function getAutoNoticeSignature(notices) {
@@ -1153,7 +1197,17 @@
         enforceOptionRules(false);
         setVisibilityState();
         await ensureGlassPricingLoaded();
-        var result = window.CustomAquariumCalculator.calculateCustomAquarium(buildPayload());
+        var payload = buildPayload();
+        var requiredSelectionError = validateRequiredSelections(payload);
+
+        if (requiredSelectionError) {
+          lastResult = null;
+          renderSummary({ ok: false, error: requiredSelectionError });
+          drawPlaceholder('Select the required fields before calculating.');
+          return;
+        }
+
+        var result = window.CustomAquariumCalculator.calculateCustomAquarium(payload);
         lastResult = result;
         syncCalculatedStateToUi(result, Boolean(showAlerts));
         renderSummary(result);
